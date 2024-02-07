@@ -6,6 +6,7 @@ from models.model import EstSum, Estado,TipoUbicacion, Consumo, Mercado, Territo
 from utils.db import db
 from config import DATABASE_CONNECTION_URI, SECRET_KEY
 import pandas as pd
+from sqlalchemy.exc import OperationalError
 import csv
 from flask_jwt_extended import JWTManager, jwt_required, create_access_token, get_jwt_identity
 
@@ -36,10 +37,11 @@ def login():
 @jwt_required()
 def protegido():
     username = get_jwt_identity()
-    return jsonify(logged_in_as=username), 200
+    return dict(success=True, message = 'prueba de ruta protegida'+ username), 200
 
 
 @app.route('/upload', methods=['POST'])
+@jwt_required()
 def upload_file():
     try:
         print('CARGANDO ARCHIVO.....')
@@ -55,12 +57,12 @@ def upload_file():
         df = pd.read_csv(file, sep=';', lineterminator='\n', encoding='ISO-8859-1')
         
         
-        # Verificar si la columna 'est_sum' está presente en el DataFrame
+        # Verificar si la columna 'EST_SUM' está presente en el DataFrame
         if 'EST_SUM' not in df.columns:
             return 'Columna "EST_SUM" no encontrada en el archivo CSV', 400
         
         
-        df.fillna('Sin información', inplace=True)
+        df.fillna(0, inplace=True)
         df.dropna(inplace=True)
         
         df_clean_estado = df.dropna(subset=['ESTADO'])
@@ -70,7 +72,6 @@ def upload_file():
         df_clean_nom_prov = df.dropna(subset=['NOM_PROV'])
         df_clean_tipo_ubicacion = df.dropna(subset=['TIPO_UBICACION'])
         
-        # Mostrar los valores de la columna 'est_sum' en la consola
         est_sum_column = df['EST_SUM'].unique()
         estado_column = df_clean_estado['ESTADO'].unique()
         mercado_column = df['MERCADO'].unique()
@@ -317,25 +318,20 @@ def upload_file():
                 csmo_norm_202210=row['CSMO_NORM_202210'],
                 csmo_norm_202211=row['CSMO_NORM_202211'],
                 csmo_norm_202212=row['CSMO_NORM_202212'],
-                csmo_norm_202303=row['CSMO_NORM_202303'],
-                csmo_norm_202304=row['CSMO_NORM_202304'],
-                csmo_norm_202305=row['CSMO_NORM_202305'],
-                csmo_norm_202306=row['CSMO_NORM_202306'],
-                csmo_norm_202307=row['CSMO_NORM_202307'],
-                csmo_norm_202308=row['CSMO_NORM_202308'],
-                csmo_norm_202309=row['CSMO_NORM_202309'],
-                csmo_norm_202310=row['CSMO_NORM_202310'],
-                csmo_norm_202311=row['CSMO_NORM_202311'], 
             )
-        db.session.add(consumo) 
+            db.session.add(consumo) 
         db.session.commit()
         print('Datos cargados')
-        return dict(success = True, total_registros = contador), 200
-    
+        return dict(success = True, message = 'Filas guardadadas: '+ str(contador)), 200
+    except OperationalError  as e:
+        print('Error de base de datos: ' + str(e))
+        return dict(success = False, message = 'Error de base de datos: ' + str(e)), 500
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        print('Error interno del servidor: ' + str(e))
+        return dict(success = False, message = 'Error interno del servidor: ' + str(e)), 500
 
 @app.route('/upload_json', methods=['POST'])
+@jwt_required()
 def upload_json_file():
     datos_json = request.get_json()
     try:
